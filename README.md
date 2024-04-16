@@ -7,6 +7,7 @@
 python extract_gradients.py 
 ```
 Before running the above command, you have to change the root folders used in the script to reflect the location where your dataset is stored.
+
 2. Include pseudo anomalies from UBNormal
 ```bash
 cd util/create_anomalies
