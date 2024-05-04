@@ -1,4 +1,12 @@
-# aed-mae
+# Self-Distilled Masked Auto-Encoders are Efficient Video Anomaly Detectors
+
+Nicolae-Catalin Ristea, Florinel-Alin Croitoru, Radu Tudor Ionescu, Marius Popescu, Fahad Shahbaz Khan, & Mubarak Shah. (2024). Self-Distilled Masked Auto-Encoders are Efficient Video Anomaly Detectors on CVPR 2024
+
+ArXiv URL: https://arxiv.org/abs/2306.12041
+
+This is the official implementation of "Self-Distilled Masked Auto-Encoders are Efficient Video Anomaly Detectors"
+
+
 
 ## Preprocessing steps
 
