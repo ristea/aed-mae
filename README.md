@@ -1,12 +1,32 @@
-# Self-Distilled Masked Auto-Encoders are Efficient Video Anomaly Detectors
+# Self-Distilled Masked Auto-Encoders are Efficient Video Anomaly Detectors (CVPR 2024) - Official Repository
 
-Nicolae-Catalin Ristea, Florinel-Alin Croitoru, Radu Tudor Ionescu, Marius Popescu, Fahad Shahbaz Khan, & Mubarak Shah. (2024). Self-Distilled Masked Auto-Encoders are Efficient Video Anomaly Detectors on CVPR, 2024.
+### by Nicolae-Catalin Ristea*, Florinel-Alin Croitoru*, Radu Tudor Ionescu, Marius Popescu, Fahad Shahbaz Khan, Mubarak Shah
 
-ArXiv URL: https://arxiv.org/abs/2306.12041
+\* Authors have contributed equally.
 
-This is the official implementation of "Self-Distilled Masked Auto-Encoders are Efficient Video Anomaly Detectors".
+This is the official repository of "Self-Distilled Masked Auto-Encoders are Efficient Video Anomaly Detectors" accepted at CVPR 2024.
 
+ArXiv preprint: https://arxiv.org/abs/2306.12041
 
+## License
+
+The source code and models are released under the Creative Common Attribution-NonCommercial-NoDerivatives 4.0 International ([CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/deed.en)) license.
+
+## Description
+
+We propose an efficient abnormal event detection model based on a lightweight masked auto-encoder (AE) applied at the video frame level. The novelty of the proposed model is threefold. First, we introduce an approach to weight tokens based on motion gradients, thus shifting the focus from the static background scene to the foreground objects. Second, we integrate a teacher decoder and a student decoder into our architecture, leveraging the discrepancy between the outputs given by the two decoders to improve anomaly detection. Third, we generate synthetic abnormal events to augment the training videos, and task the masked AE model to jointly reconstruct the original frames (without anomalies) and the corresponding pixel-level anomaly maps. Our design leads to an efficient and effective model, as demonstrated by the extensive experiments carried out on four benchmarks: Avenue, ShanghaiTech, UBnormal and UCSD Ped2. The empirical results show that our model achieves an excellent trade-off between speed and accuracy, obtaining competitive AUC scores, while processing 1655 FPS. Our model is between 8 and 70 times faster than competing methods.
+
+## Citation 
+Please cite our work if you use any material released in this repository.
+```
+@InProceedings{Ristea-CVPR-2024,
+  author    = {Ristea, Nicolae-Catalin and Croitoru, Florinel-Alin and Ionescu, Radu Tudor and Popescu, Marius and Khan, Fahad Shahbaz and Shah, Mubarak},
+  title     = "{Self-Distilled Masked Auto-Encoders are Efficient Video Anomaly Detectors}",
+  booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  month     = {June},
+  year      = {2024},
+  }
+```
 
 ## Preprocessing steps
 
