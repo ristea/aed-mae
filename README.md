@@ -10,7 +10,7 @@ ArXiv preprint: https://arxiv.org/abs/2306.12041
 
 ## License
 
-The source code and models are released under the Creative Common Attribution-NonCommercial-NoDerivatives 4.0 International ([CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/deed.en)) license.
+The source code and models are released under the Creative Common Attribution-NonCommercial-ShareAlike 4.0 International ([CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/)) license.
 
 ## Description
 
