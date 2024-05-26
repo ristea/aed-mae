@@ -79,6 +79,8 @@ def test_one_epoch(model: torch.nn.Module, data_loader: Iterable,
         grads = grads.to(device)
         targets = targets.to(device)
         _, _, _, recon_error = model(samples, grad_mask=grads,targets=targets, mask_ratio=args.mask_ratio)
+        if isinstance(recon_error, list):
+            recon_error = recon_error[0] + recon_error[1]
         recon_error = recon_error.detach().cpu().numpy()
         predictions += list(recon_error)
 

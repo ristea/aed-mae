@@ -9,7 +9,7 @@ def get_configs_avenue():
     config.start_TS_epoch = 100
     config.masking_method = "random_masking"
     config.output_dir = "experiments/avenue"  # the checkpoints will be loaded from here
-    config.abnormal_score_func = 'L2'
+    config.abnormal_score_func = ['L2', 'L2']
     config.grad_weighted_rec_loss = True
     config.model = "mae_cvt"
     config.input_size = (320, 640)
@@ -23,7 +23,7 @@ def get_configs_avenue():
 
     # Dataset parameters
     config.dataset = "avenue"
-    config.avenue_path = "/media/alin/hdd/Avenue_Dataset/Avenue Dataset"
+    config.avenue_path = "/media/alin/ssd2/datasets/Avenue_Dataset/Avenue Dataset"
     config.avenue_gt_path = "/media/alin/hdd/Transformer_Labels/Avenue_gt"
     config.percent_abnormal = 0.25
     config.input_3d = True
