@@ -6,7 +6,7 @@
 
 This is the official repository of "Self-Distilled Masked Auto-Encoders are Efficient Video Anomaly Detectors" accepted at CVPR 2024.
 
-ArXiv preprint: https://arxiv.org/abs/2306.12041
+Paper links: [Open CVF](https://openaccess.thecvf.com/content/CVPR2024/html/Ristea_Self-Distilled_Masked_Auto-Encoders_are_Efficient_Video_Anomaly_Detectors_CVPR_2024_paper.html), [ArXiv](https://arxiv.org/abs/2306.12041).
 
 ## License
 
@@ -25,6 +25,7 @@ Please cite our work if you use any material released in this repository.
   booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
   month     = {June},
   year      = {2024},
+  pages     = {15984--15995}
   }
 ```
 
@@ -36,7 +37,7 @@ python extract_gradients.py
 ```
 Before running the above command, you have to change the root folders used in the script to reflect the location where your dataset is stored.
 
-2. Include pseudo anomalies from UBNormal
+2. Include pseudo anomalies from UBnormal
 ```bash
 cd util/create_anomalies
 python main.py
