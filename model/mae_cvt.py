@@ -1,14 +1,17 @@
+import einops
 import numpy as np
 import torch
 from einops import rearrange
 from torch import nn
 import torch.nn.functional as F
+from torch.nn import BCELoss
+
 from model.cvt import ConvEmbed, Block
 from util.morphology import Erosion2d, Dilation2d
 
 
 class MaskedAutoencoderCvT(nn.Module):
-    def __init__(self, img_size=(512,512), patch_size=16, in_chans=9, out_chans=4,
+    def __init__(self, img_size=(512, 512), patch_size=16, in_chans=9, out_chans=4,
                  embed_dim=1024, depth=24, num_heads=16,
                  decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
                  mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False,
@@ -18,12 +21,13 @@ class MaskedAutoencoderCvT(nn.Module):
         # --------------------------------------------------------------------------
         # Abnormal specifics
         self.use_only_masked_tokens_ab = use_only_masked_tokens_ab
-        self.abnormal_score_func = abnormal_score_func[0]
-        self.abnormal_score_func_TS = abnormal_score_func[1]
+        self.abnormal_score_func = abnormal_score_func
+        self.abnormal_score_func_TS = abnormal_score_func
+        self.cls_loss = BCELoss()
         # --------------------------------------------------------------------------
 
         self.masking = getattr(self, masking_method)
-        self.grad_weighted_loss=grad_weighted_loss
+        self.grad_weighted_loss = grad_weighted_loss
 
         assert 0 < student_depth < decoder_depth
         self.student_depth = student_depth
@@ -40,7 +44,7 @@ class MaskedAutoencoderCvT(nn.Module):
             norm_layer=norm_layer
         )
         self.patch_size = patch_size
-        self.num_patches = img_size[0]//patch_size*img_size[1]//patch_size
+        self.num_patches = img_size[0] // patch_size * img_size[1] // patch_size
         self.cls_token = nn.Parameter(
             torch.zeros(1, 1, embed_dim)
         )
@@ -49,6 +53,7 @@ class MaskedAutoencoderCvT(nn.Module):
             Block(embed_dim, embed_dim, num_heads, mlp_ratio, qkv_bias=True, qk_scale=None, norm_layer=norm_layer)
             for i in range(depth)])
         self.norm = norm_layer(embed_dim)
+        self.cls_anomalies = nn.Linear(embed_dim, 1)
         # --------------------------------------------------------------------------
 
         # --------------------------------------------------------------------------
@@ -58,16 +63,19 @@ class MaskedAutoencoderCvT(nn.Module):
         self.mask_token = nn.Parameter(torch.zeros(1, 1, decoder_embed_dim))
 
         self.decoder_blocks = nn.ModuleList([
-            Block(decoder_embed_dim, decoder_embed_dim, decoder_num_heads, mlp_ratio, qkv_bias=True, qk_scale=None, norm_layer=norm_layer)
+            Block(decoder_embed_dim, decoder_embed_dim, decoder_num_heads, mlp_ratio, qkv_bias=True, qk_scale=None,
+                  norm_layer=norm_layer)
             for i in range(decoder_depth)])
 
         self.decoder_norm = norm_layer(decoder_embed_dim)
         self.decoder_pred = nn.Linear(decoder_embed_dim, patch_size ** 2 * out_chans, bias=True)  # decoder to patch
 
-        self.decoder_student_block = Block(decoder_embed_dim, decoder_embed_dim, decoder_num_heads, mlp_ratio, qkv_bias=True, qk_scale=None, norm_layer=norm_layer)
+        self.decoder_student_block = Block(decoder_embed_dim, decoder_embed_dim, decoder_num_heads, mlp_ratio,
+                                           qkv_bias=True, qk_scale=None, norm_layer=norm_layer)
         self.decoder_student_norm = norm_layer(decoder_embed_dim)
-        self.decoder_student_pred = nn.Linear(decoder_embed_dim, patch_size ** 2 * out_chans, bias=True)  # decoder to patch
-        self.out_chans=out_chans
+        self.decoder_student_pred = nn.Linear(decoder_embed_dim, patch_size ** 2 * out_chans,
+                                              bias=True)  # decoder to patch
+        self.out_chans = out_chans
         # --------------------------------------------------------------------------
 
         self.norm_pix_loss = norm_pix_loss
@@ -96,7 +104,7 @@ class MaskedAutoencoderCvT(nn.Module):
             for param in self.decoder_blocks[i].parameters():
                 param.requires_grad = False
 
-    def patchify(self, imgs):
+    def patchify(self, imgs, chans=None):
         """
         imgs: (N, 3, H, W)
         x: (N, L, patch_size**2 *3)
@@ -107,9 +115,9 @@ class MaskedAutoencoderCvT(nn.Module):
         h = imgs.shape[2] // p
         w = imgs.shape[3] // p
 
-        x = imgs.reshape(shape=(imgs.shape[0], self.out_chans, h, p, w, p))
+        x = imgs.reshape(shape=(imgs.shape[0], self.out_chans if chans is None else chans, h, p, w, p))
         x = torch.einsum('nchpwq->nhwpqc', x)
-        x = x.reshape(shape=(imgs.shape[0], h * w, p ** 2 * self.out_chans))
+        x = x.reshape(shape=(imgs.shape[0], h * w, p ** 2 * (self.out_chans if chans is None else chans)))
         return x
 
     def unpatchify(self, x):
@@ -118,8 +126,8 @@ class MaskedAutoencoderCvT(nn.Module):
         imgs: (N, 3, H, W)
         """
         p = self.patch_embed.patch_size[0]
-        h = 20
-        w=40
+        h = 10
+        w = 20
         assert h * w == x.shape[1]
 
         x = x.reshape(shape=(x.shape[0], h, w, p, p, self.out_chans))
@@ -134,7 +142,7 @@ class MaskedAutoencoderCvT(nn.Module):
         x: [N, L, D], sequence
         """
         N, D, H, W = x.shape  # batch, length, dim
-        L = H*W
+        L = H * W
         x = rearrange(x, 'b c h w -> b (h w) c')
         len_keep = int(L * (1 - mask_ratio))
 
@@ -154,7 +162,7 @@ class MaskedAutoencoderCvT(nn.Module):
         # unshuffle to get the binary mask
         mask = torch.gather(mask, dim=1, index=ids_restore)
         self.masked_H = H
-        self.masked_W = int(W*(1.-mask_ratio))
+        self.masked_W = int(W * (1. - mask_ratio))
         self.H = H
         self.W = W
         # x_masked = rearrange(x_masked, 'b (h w) c -> b c h w', h=self.masked_H, w=self.masked_W)
@@ -170,7 +178,7 @@ class MaskedAutoencoderCvT(nn.Module):
         grad_mask = rearrange(grad_mask, 'b h w -> b (h w)')
 
         N, D, H, W = x.shape  # batch, length, dim
-        L = H*W
+        L = H * W
         x = rearrange(x, 'b c h w -> b (h w) c')
         len_keep = int(L * (1 - mask_ratio))
 
@@ -188,7 +196,7 @@ class MaskedAutoencoderCvT(nn.Module):
         # unshuffle to get the binary mask
         mask = torch.gather(mask, dim=1, index=ids_restore)
         self.masked_H = H
-        self.masked_W = int(W*(1.-mask_ratio))
+        self.masked_W = int(W * (1. - mask_ratio))
         self.H = H
         self.W = W
         # x_masked = rearrange(x_masked, 'b (h w) c -> b c h w', h=self.masked_H, w=self.masked_W)
@@ -282,7 +290,7 @@ class MaskedAutoencoderCvT(nn.Module):
 
         loss = (pred - target) ** 2
         loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
-        min_magnitude_anomaly = torch.ones((gradients.shape[0],1,1,1), device=imgs.device) * 128
+        min_magnitude_anomaly = torch.ones((gradients.shape[0], 1, 1, 1), device=imgs.device) * 128
         if self.grad_weighted_loss:
             anomaly_map = imgs[:, 3:, :, :]
             anomaly_map = torch.clip(anomaly_map, min=0, max=1)
@@ -306,25 +314,55 @@ class MaskedAutoencoderCvT(nn.Module):
         return loss
 
     def forward(self, imgs, targets, grad_mask=None, mask_ratio=0.75):
+
         latent, mask, ids_restore = self.forward_encoder(imgs, mask_ratio, grad_mask)
 
         if self.train_TS is False:
+
             pred = self.forward_decoder(latent, ids_restore)  # [N, L, p*p*3]
             loss = self.forward_loss(targets, grad_mask, pred, mask)
+            b, c, h, w = targets.shape
+            target_labels = self.patchify(targets[:, -1:, :, :], chans=1).mean(2)
+            num_patches = target_labels.shape[1]
+            target_labels = einops.rearrange(target_labels, 'b p->(b p)', p=num_patches)
+            flatten_mask = einops.rearrange(mask, 'b p->(b p)', p=num_patches)
+            target_labels = target_labels[flatten_mask == 0]
+            target_labels = einops.rearrange(target_labels, "(b p)-> b p", p=int(num_patches * mask_ratio))
+            target_labels = (target_labels != -1) * 1
+            # cls_token = latent[:, -1]
+            pred_anomalies = torch.sigmoid(self.cls_anomalies(latent[:, 1:, :]).squeeze())
+            cls_loss = self.cls_loss(pred_anomalies, target_labels.float())
+            loss = loss + 0.5 * cls_loss
             if self.training:
                 return loss, pred, mask
             else:
-                return loss, pred, mask, self.abnormal_score(targets, pred, mask, grad_mask)
+                return loss, pred, mask, self.abnormal_score(targets, pred, mask, grad_mask, pred_anomalies)
         else:
             pred_stud, pred_teacher = self.forward_decoder_TS(latent, ids_restore)  # [N, L, p*p*3]
             loss = self.forward_loss_TS(pred_stud, pred_teacher, mask)
+            b, c, h, w = targets.shape
+            target_labels = self.patchify(targets[:, -1:, :], chans=1).mean(2)
+            num_patches = target_labels.shape[1]
+            target_labels = einops.rearrange(target_labels, 'b p->(b p)', p=num_patches)
+            flatten_mask = einops.rearrange(mask, 'b p->(b p)', p=num_patches)
+            target_labels = target_labels[flatten_mask == 0]
+            target_labels = einops.rearrange(target_labels, "(b p)-> b p", p=int(num_patches * (1-mask_ratio)))
+            target_labels = (target_labels != -1) * 1
+            # cls_token = latent[:, -1]
+            pred_anomalies = torch.sigmoid(self.cls_anomalies(latent[:, 1:, :]).squeeze())
+            cls_loss = self.cls_loss(pred_anomalies, target_labels.float())
+            loss = loss + 0.5 * cls_loss
             if self.training:
                 return loss, pred_stud, mask
             else:
-                return loss, pred_teacher, mask, self.abnormal_score_TS(targets, pred_stud, pred_teacher, mask, grad_mask)
+                return loss, pred_teacher, mask, self.abnormal_score_TS(targets, pred_stud, pred_teacher, mask,
+                                                                        grad_mask, pred_anomalies)
 
-    def abnormal_score(self, imgs, pred, mask, gradients):
+    def abnormal_score(self, imgs, pred, mask, gradients, pred_anomalies):
         imgs = self.patchify(imgs)
+        grad_weights = F.max_pool2d(gradients, self.patch_size).mean(1)
+        grad_weights = rearrange(grad_weights, 'b h w -> b (h w)')
+        grad_weights = grad_weights / grad_weights.sum(dim=1, keepdims=True)
         if self.use_only_masked_tokens_ab:
             mask = mask.bool()
             selected_pred = []
@@ -335,29 +373,29 @@ class MaskedAutoencoderCvT(nn.Module):
 
             pred = torch.stack(selected_pred)
             imgs = torch.stack(selected_lbl)
-        return ((imgs - pred) ** 2).mean((1, 2))  # MSE
+        return [((imgs - pred) ** 2).mean((1, 2)), pred_anomalies.mean(1)]  # MSE
 
-    def abnormal_score_TS(self, imgs, pred_stud, pred_teacher, mask, gradients):
+    def abnormal_score_TS(self, imgs, pred_stud, pred_teacher, mask, gradients, pred_anomalies):
         imgs = self.patchify(imgs)
         grad_weights = F.avg_pool2d(gradients, self.patch_size).mean(1)
         grad_weights = rearrange(grad_weights, 'b h w -> b (h w)')
         grad_weights = grad_weights / grad_weights.sum(dim=1, keepdims=True)
-        if self.use_only_masked_tokens_ab:
-            mask = mask.bool()
-            selected_pred_stud = []
-            selected_pred_teacher = []
-            selected_lbl = []
-            selected_gradients = []
-            for i in range(0, imgs.shape[0]):
-                selected_pred_stud.append(pred_stud[i][mask[i]])
-                selected_pred_teacher.append(pred_teacher[i][mask[i]])
-                selected_lbl.append(imgs[i][mask[i]])
-                selected_gradients.append(grad_weights[i][mask[i]])
-
-            pred_stud_masked = torch.stack(selected_pred_stud)
-            pred_teacher_masked = torch.stack(selected_pred_teacher)
-            imgs_masked = torch.stack(selected_lbl)
-            grad_weights_masked = torch.stack(selected_gradients)
+        grad_weights *=10
+        # if self.use_only_masked_tokens_ab:
+        mask = mask.bool()
+        selected_pred_stud = []
+        selected_pred_teacher = []
+        selected_lbl = []
+        selected_gradients = []
+        for i in range(0, imgs.shape[0]):
+            selected_pred_stud.append(pred_stud[i][mask[i]])
+            selected_pred_teacher.append(pred_teacher[i][mask[i]])
+            selected_lbl.append(imgs[i][mask[i]])
+            selected_gradients.append(grad_weights[i][mask[i]])
+        pred_stud_masked = torch.stack(selected_pred_stud)
+        pred_teacher_masked = torch.stack(selected_pred_teacher)
+        imgs_masked = torch.stack(selected_lbl)
+        grad_weights_masked = torch.stack(selected_gradients)
         output = []
         if self.abnormal_score_func_TS == "L1":
             output.append(torch.abs(pred_teacher - pred_stud).mean((2)))  # MAE
@@ -367,21 +405,18 @@ class MaskedAutoencoderCvT(nn.Module):
 
             output.append((((pred_teacher - pred_stud) ** 2).mean(2)))
             output.append((((imgs - pred_teacher) ** 2).mean(2)))
-            return [output[0].mean(1), output[1].mean(1)]
-
+            return [output[0].mean(1), output[1].mean(1), pred_anomalies.mean(1)]
     def process_result(self, gradients, pred_stud, pred_teacher, do_erosion=True):
-        gradients = gradients.mean(dim=1,keepdim=True)
+        gradients = gradients.mean(dim=1, keepdim=True)
         gradients = (gradients - torch.amin(gradients, dim=(1, 2), keepdim=True)) / (
-                    torch.amax(gradients, dim=(1, 2), keepdim=True)
-                    - torch.amin(gradients, dim=(1, 2), keepdim=True))
+                torch.amax(gradients, dim=(1, 2), keepdim=True)
+                - torch.amin(gradients, dim=(1, 2), keepdim=True))
 
         teacher_student = ((pred_teacher - pred_stud) ** 2)
-
 
         if do_erosion:
             teacher_student = self.unpatchify(teacher_student)
             teacher_student *= gradients
-
 
             teacher_student[:, -1:] = self.erosion(teacher_student[:, -1:])
             teacher_student[:, -1:] = self.dilation(teacher_student[:, -1:])

@@ -23,10 +23,10 @@ def banchmark(batch_size, model, device, img_size, num_iter=100):
         start = datetime.datetime.now()
         _ = model(img, targets, mask_ratio=0.50)
         end = datetime.datetime.now()
-        time.append((end - start).microseconds / 1e3)
+        time.append((end - start).microseconds / 1e6)
         if i % 5 ==0:
             gc.collect()
-
+    print(time)
     return np.mean(time)
 
 
@@ -39,4 +39,4 @@ if __name__ == '__main__':
     mean_time = banchmark(batch_size, model, device, img_size=img_size, num_iter=1000)
 
     print(f"Mean time: {mean_time}")
-    print(f"FPS: {batch_size * 1000 / mean_time}")
+    print(f"FPS: {batch_size  / mean_time}")
