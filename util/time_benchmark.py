@@ -18,12 +18,15 @@ def get_MAE(img_size, device):
 def banchmark(batch_size, model, device, img_size, num_iter=100):
     img = torch.randn(batch_size, 9, img_size[0], img_size[1]).to(device)
     targets = torch.randn(batch_size, 4, img_size[0], img_size[1]).to(device)
+    # forward_loss() needs grad_mask (see #5); note that it also updates grad_mask in place
+    grad_mask = torch.zeros(batch_size, 3, img_size[0], img_size[1]).to(device)
     time = []
     for i in range(0, num_iter):
         start = datetime.datetime.now()
-        _ = model(img, targets, mask_ratio=0.50)
+        _ = model(img, targets, grad_mask=grad_mask, mask_ratio=0.50)
+        torch.cuda.synchronize()  # wait for the GPU to finish before reading the clock
         end = datetime.datetime.now()
-        time.append((end - start).microseconds / 1e3)
+        time.append((end - start).total_seconds() * 1e3)
         if i % 5 ==0:
             gc.collect()
 
